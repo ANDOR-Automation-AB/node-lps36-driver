@@ -1,6 +1,6 @@
 {
   "name": "node-lps36-driver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Leuze LPS 36 line profile sensor — Node.js UDP/IP protocol driver",
   "main": "lps36.js",
   "files": [

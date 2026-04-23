@@ -24,6 +24,8 @@ See [Exported functions](#exported-functions) for the low-level `buildPacket` an
 
 See [Running the test suite](#running-the-test-suite) for running the full protocol test suite against a live sensor.
 
+See [CHANGELOG](CHANGELOG.md) for version history and release notes.
+
 ### Installation
 
 ```
