@@ -1,0 +1,20 @@
+{
+  "name": "node-lps36-driver",
+  "version": "1.0.0",
+  "description": "Leuze LPS 36 line profile sensor — Node.js UDP/IP protocol driver",
+  "main": "lps36.js",
+  "files": [
+    "lps36.js"
+  ],
+  "scripts": {
+    "test": "node test.js"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ANDOR-Automation-AB/node-lps36-driver.git"
+  },
+  "license": "MIT"
+}

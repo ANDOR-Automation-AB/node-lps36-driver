@@ -1,0 +1,6 @@
+*
+!.gitignore
+!lps36.js
+!package.json
+!readme.md
+!test.js
