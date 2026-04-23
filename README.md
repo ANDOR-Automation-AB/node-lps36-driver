@@ -26,6 +26,74 @@ await sensor.setTaskParam(LPS36.TASK_PARAM.OPERATION_MODE, 1, true);
 await sensor.setUserParam(LPS36.PARAM.MEDIAN_FILTER, 1);
 ```
 
+### Quick start
+
+#### Free-running measure mode (100 Hz streaming)
+
+Each Z and X event carries a `scanNo`. Z and X events with the same `scanNo` belong to the same physical scan. Z values are unsigned, unit 1/10 mm, range 0–8100. X values are signed, unit 1/10 mm.
+
+```js
+const LPS36 = require('node-lps36-driver');
+
+const sensor = new LPS36({ host: '192.168.60.3' });
+
+sensor.on('z-data', ({ scanNo, z }) => {
+  console.log('Z scan', scanNo, z[0]);
+});
+
+sensor.on('x-data', ({ scanNo, x }) => {
+  console.log('X scan', scanNo, x[0]);
+});
+
+sensor.on('error', (err) => console.error(err));
+
+await sensor.open();
+await sensor.connect();
+```
+
+The sensor now streams Z+X data continuously at up to 100 Hz.
+
+#### Software trigger in measure mode
+
+Switch the sensor to Input Triggered mode first — this persists across restarts. Then call `ethernetTrigger()` for each scan.
+
+```js
+const LPS36 = require('node-lps36-driver');
+const sensor = new LPS36({ host: '192.168.60.3' });
+
+await sensor.open();
+await sensor.connect();
+
+await sensor.enterCommandMode();
+await sensor.setTaskParam(LPS36.TASK_PARAM.OPERATION_MODE, 1, true);
+await sensor.exitCommandMode();
+
+const { scanNo, z, x } = await sensor.ethernetTrigger();
+console.log('scan', scanNo, 'z0=', z[0], 'x0=', x[0]);
+
+await sensor.disconnect();
+sensor.close();
+```
+
+#### Command mode — single triggered measurement
+
+`triggerSingleMeasurement()` includes the required 30 ms settling delay internally. Call `getZCoordinates` and `getXCoordinates` immediately after.
+
+```js
+await sensor.open();
+await sensor.connect();
+await sensor.enterCommandMode();
+
+await sensor.triggerSingleMeasurement();
+
+const z = await sensor.getZCoordinates();
+const x = await sensor.getXCoordinates();
+
+await sensor.exitCommandMode();
+await sensor.disconnect();
+sensor.close();
+```
+
 ### Running the test suite
 
 `test.js` exercises every protocol command against a live sensor and reports a PASS, WARN or FAIL per step. The exit code is 0 when no steps have failed.
@@ -148,74 +216,6 @@ The table below lists every test block, what it verifies, and the expected resul
 `ethernetActivation(false, deactivate)` sends the deactivation command but does not wait for a response. The LPS 36 protocol specification states that the sensor sends no response in the deactivated state, so the call is fire-and-forget. The PASS line confirms the UDP packet was transmitted.
 
 The `connected` field in the status object returned by `connect()` reflects the sensor state at the moment the ACK was generated, before the connection flag is updated internally by the sensor firmware. The value `false` immediately after a successful connect is normal and expected.
-
-### Quick start
-
-#### Free-running measure mode (100 Hz streaming)
-
-Each Z and X event carries a `scanNo`. Z and X events with the same `scanNo` belong to the same physical scan. Z values are unsigned, unit 1/10 mm, range 0–8100. X values are signed, unit 1/10 mm.
-
-```js
-const LPS36 = require('node-lps36-driver');
-
-const sensor = new LPS36({ host: '192.168.60.3' });
-
-sensor.on('z-data', ({ scanNo, z }) => {
-  console.log('Z scan', scanNo, z[0]);
-});
-
-sensor.on('x-data', ({ scanNo, x }) => {
-  console.log('X scan', scanNo, x[0]);
-});
-
-sensor.on('error', (err) => console.error(err));
-
-await sensor.open();
-await sensor.connect();
-```
-
-The sensor now streams Z+X data continuously at up to 100 Hz.
-
-#### Software trigger in measure mode
-
-Switch the sensor to Input Triggered mode first — this persists across restarts. Then call `ethernetTrigger()` for each scan.
-
-```js
-const LPS36 = require('node-lps36-driver');
-const sensor = new LPS36({ host: '192.168.60.3' });
-
-await sensor.open();
-await sensor.connect();
-
-await sensor.enterCommandMode();
-await sensor.setTaskParam(LPS36.TASK_PARAM.OPERATION_MODE, 1, true);
-await sensor.exitCommandMode();
-
-const { scanNo, z, x } = await sensor.ethernetTrigger();
-console.log('scan', scanNo, 'z0=', z[0], 'x0=', x[0]);
-
-await sensor.disconnect();
-sensor.close();
-```
-
-#### Command mode — single triggered measurement
-
-`triggerSingleMeasurement()` includes the required 30 ms settling delay internally. Call `getZCoordinates` and `getXCoordinates` immediately after.
-
-```js
-await sensor.open();
-await sensor.connect();
-await sensor.enterCommandMode();
-
-await sensor.triggerSingleMeasurement();
-
-const z = await sensor.getZCoordinates();
-const x = await sensor.getXCoordinates();
-
-await sensor.exitCommandMode();
-await sensor.disconnect();
-sensor.close();
-```
 
 ### Protocol overview
 
