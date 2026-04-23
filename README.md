@@ -156,7 +156,7 @@ The `connected` field in the status object returned by `connect()` reflects the 
 Each Z and X event carries a `scanNo`. Z and X events with the same `scanNo` belong to the same physical scan. Z values are unsigned, unit 1/10 mm, range 0–8100. X values are signed, unit 1/10 mm.
 
 ```js
-const LPS36 = require('./lps36');
+const LPS36 = require('node-lps36-driver');
 
 const sensor = new LPS36({ host: '192.168.60.3' });
 
@@ -181,7 +181,7 @@ The sensor now streams Z+X data continuously at up to 100 Hz.
 Switch the sensor to Input Triggered mode first — this persists across restarts. Then call `ethernetTrigger()` for each scan.
 
 ```js
-const LPS36 = require('./lps36');
+const LPS36 = require('node-lps36-driver');
 const sensor = new LPS36({ host: '192.168.60.3' });
 
 await sensor.open();
