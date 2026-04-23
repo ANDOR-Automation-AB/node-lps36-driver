@@ -8,7 +8,21 @@ A Node.js library for communicating with the Leuze LPS 36 (line profile sensor) 
 | Network | Leuze LPS 36 sensor reachable over UDP |
 | Firewall | UDP ports 9008 (commands) and 5634 (measure data) open, and ICMP echo (ping) allowed |
 
-For running the test suite against a live sensor, see [Running the test suite](#running-the-test-suite).
+See [Quick start](#quick-start) for code examples covering free-running streaming, software triggers, and command mode.
+
+See [Protocol overview](#protocol-overview) for a full description of the UDP protocol, packet structure, and sensor modes.
+
+See [API reference](#api-reference) for the complete method and event reference.
+
+See [Common recipes](#common-recipes) for ready-to-use patterns such as scan pairing, triggered acquisition, and cascaded sensor sync.
+
+See [Error handling](#error-handling) for how errors are reported and how to handle timeouts and NACKs.
+
+See [Notes on byte order](#notes-on-byte-order) for a note on little-endian byte order and how this driver handles it.
+
+See [Exported functions](#exported-functions) for the low-level `buildPacket` and `parseStatus` functions exported alongside the class.
+
+See [Running the test suite](#running-the-test-suite) for running the full protocol test suite against a live sensor.
 
 ### Installation
 
@@ -95,129 +109,6 @@ await sensor.exitCommandMode();
 await sensor.disconnect();
 sensor.close();
 ```
-
-### Running the test suite
-
-`test.js` exercises every protocol command against a live sensor and reports a PASS, WARN or FAIL per step. The exit code is 0 when no steps have failed.
-
-```
-npm test
-```
-
-Two environment variables control the target:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LPS_HOST` | `192.168.60.3` | Sensor IP address |
-| `LPS_TIMEOUT` | `3000` | Response timeout in milliseconds |
-
-```
-LPS_HOST=10.0.0.5 LPS_TIMEOUT=5000 npm test
-```
-
-#### Output format
-
-Each step is printed as a block with a heading in brackets followed by a result line:
-
-| Prefix | Counted as | Meaning |
-|--------|-----------|---------|
-| `PASS` | passed | Command acknowledged. Returned value printed as JSON. |
-| `WARN` | warned | Command not supported on this sensor model. Not a failure. |
-| `FAIL` | failed | Timeout or NACK. Exit code will be 1. |
-
-Free-running stream events are logged with prefix `[stream]` (only the first two per phase are shown).
-
-#### Test steps
-
-The table below lists every test block, what it verifies, and the expected result by sensor model.
-
-| Test step | Verifies | Standard LPS 36 | LPS 36HI/EN |
-|-----------|----------|-----------------|-------------|
-| open sockets | UDP socket bind | PASS | PASS |
-| connect (Standard-Connect) | `CONNECT` (0x434E) | PASS | PASS |
-| free-running measure mode | 2 s of streaming Z+X data at up to 100 Hz | PASS | PASS |
-| enterCommandMode | `ENTER_CMD` (0x3132) | PASS | PASS |
-| getInspectionTask | `GET_TASK` (0x0049) | PASS | PASS |
-| setInspectionTask (temp) | `SET_TASK` (0x004B), save=false | PASS | PASS |
-| setInspectionTask (persist) | `SET_TASK` (0x004B), save=true | PASS | PASS |
-| getTaskParam TASK_NUMBER | `GET_TASK_PARAM` (0x006F), ID 0x0BB8 | PASS | PASS |
-| getTaskParam TASK_NAME | `GET_TASK_PARAM`, ID 0x0BB9 — prints decoded name | PASS | PASS |
-| getTaskParam OPERATION_MODE | `GET_TASK_PARAM`, ID 0x0BBA | PASS | PASS |
-| getTaskParam ACTIVATION | `GET_TASK_PARAM`, ID 0x0BBB | PASS | PASS |
-| getTaskParam CASCADE_OUTPUT | `GET_TASK_PARAM`, ID 0x0BBC | PASS | PASS |
-| getTaskParam LIGHT_EXPOSURE | `GET_TASK_PARAM`, ID 0x0BBD | PASS | PASS |
-| getTaskParam EXPOSURE_MANUAL | `GET_TASK_PARAM`, ID 0x0BBE | PASS | PASS |
-| getTaskParam FOV_X | `GET_TASK_PARAM`, ID 0x0BBF — prints range in mm | PASS | PASS |
-| getTaskParam FOV_Z | `GET_TASK_PARAM`, ID 0x0BC0 — prints range in mm | PASS | PASS |
-| setTaskParam OPERATION_MODE (FreeRunning, temp) | `SET_TASK_PARAM` (0x006D), saves value 0 temporarily | PASS | PASS |
-| setTaskParam OPERATION_MODE (restore, temp) | Restores original value temporarily | PASS | PASS |
-| setTaskParam ACTIVATION (Disregard, temp) | Writes Disregard (0) temporarily | PASS | PASS |
-| setTaskParam CASCADE_OUTPUT (Disable, temp) | Writes Disable (0) temporarily | PASS | PASS |
-| setTaskParam LIGHT_EXPOSURE (Normal, temp) | Writes Normal (0) temporarily | PASS | PASS |
-| setTaskParam FOV_X (restore, temp) | Restores previously read FOV X temporarily | PASS | PASS |
-| setTaskParam FOV_Z (restore, temp) | Restores previously read FOV Z temporarily | PASS | PASS |
-| getUserParam DISABLE_X_OUTPUT | `GET_USER_PARAM` (0x005B), ID 0x07D4 | PASS | PASS |
-| getUserParam TX_PAUSE | `GET_USER_PARAM`, ID 0x07D8 — prints value in ms | PASS | PASS |
-| getUserParam MEDIAN_FILTER | `GET_USER_PARAM`, ID 0x07DB | PASS | PASS |
-| setXOutput(disable, temp) | `SET_USER_PARAM` via convenience wrapper | PASS | PASS |
-| setXOutput(enable, temp) | Restores X output | PASS | PASS |
-| setMedianFilter(on, temp) | Enables median filter temporarily | PASS | PASS |
-| setMedianFilter(off, temp) | Disables median filter temporarily | PASS | PASS |
-| setTxPause(5, temp) | Sets TX pause to 0.5 ms temporarily | PASS | PASS |
-| setTxPause(0, temp) | Restores TX pause to default | PASS | PASS |
-| setScanNumber(100) | `SET_SCAN_NUM` (0x0053) | PASS | PASS |
-| setEncoderValue(0) | `SET_ENCODER` (0x0029), 32-bit value 0 | PASS | PASS |
-| setEncoderValue(12345) | `SET_ENCODER`, 32-bit value 12345 | PASS | PASS |
-| setEncoderValue(0) | Resets encoder to 0 | PASS | PASS |
-| setLaserGate(off) | `SET_LASER` (0x0001), value 0 | PASS | PASS |
-| setLaserGate(on) | `SET_LASER`, value 1 | PASS | PASS |
-| triggerSingleMeasurement | `TRIGGER_SINGLE` (0x0003) + 30 ms settle | PASS | PASS |
-| getZCoordinates | `GET_Z` (0x0013) — prints valid point count and Z range | PASS | PASS |
-| getXCoordinates | `GET_X` (0x0011) — prints X range | PASS | PASS |
-| getZXCoordinates (HI-Connect only) | `GET_ZX` (0x005F) | WARN | PASS |
-| setTaskParam OPERATION_MODE (Input Triggered, temp) | Sets Input Triggered mode for the ethernetTrigger test | PASS | PASS |
-| exitCommandMode | `EXIT_CMD` (0x3133) | PASS | PASS |
-| ethernetTrigger | `ETH_TRIGGER` (0x4554) — sensor is now in Input Triggered mode, returns one triggered scan | PASS | PASS |
-| enterCommandMode (activation setup) | Re-enters command mode to configure activation | PASS | PASS |
-| setTaskParam ACTIVATION (Regard, temp) | Sets Activation Input = Regard for the ethernetActivation test | PASS | PASS |
-| setTaskParam OPERATION_MODE (FreeRunning, temp) | Sets Free Running so that activation immediately produces a scan | PASS | PASS |
-| exitCommandMode (activation setup) | Returns to measure mode | PASS | PASS |
-| ethernetActivation(true) | `ETH_ACTIVATION` (0x4541), value 1 — sensor activates and returns first free-running scan | PASS | PASS |
-| ethernetActivation(false, deactivate) | `ETH_ACTIVATION`, value 0 — sensor deactivates, no response per spec (fire-and-forget) | PASS | PASS |
-| enterCommandMode (restore) | Re-enters command mode to restore original settings | PASS | PASS |
-| setTaskParam ACTIVATION (restore, temp) | Restores original Activation Input setting | PASS | PASS |
-| setTaskParam OPERATION_MODE (restore, temp) | Restores original Operation Mode | PASS | PASS |
-| getAllTaskParams (undocumented 0x0043) | Undocumented bulk read of all task params. WARN if not supported. | PASS or WARN | PASS or WARN |
-| getDeviceInfo (undocumented 0x0045) | Undocumented `GET_DEVICE_INFO` — prints firmware and serial strings. WARN if not supported. | PASS or WARN | PASS or WARN |
-| exitCommandMode (restore) | Returns to measure mode | PASS | PASS |
-| disconnect | `DISCONNECT` (0x4443) | PASS | PASS |
-| connect (HI-Connect) | `CONNECT` with user data word 0x0001 — standard model falls back to Standard-Connect | PASS | PASS |
-| HI-Connect free-running | 1 s of streaming data — ZX packets on HI model, Z+X pairs on standard | PASS | PASS |
-| enterCommandMode (HI) | Same as standard enterCommandMode | PASS | PASS |
-| triggerSingleMeasurement (HI) | Same as standard triggerSingleMeasurement | PASS | PASS |
-| getZXCoordinates (HI) | `GET_ZX` in HI command mode | WARN | PASS |
-| exitCommandMode (HI) | Same as standard exitCommandMode | PASS | PASS |
-| disconnect (HI) | Same as standard disconnect | PASS | PASS |
-
-#### Expected summary by model
-
-| Sensor model | passed | warned | failed | Exit code |
-|--------------|--------|--------|--------|-----------|
-| LPS 36 (standard), getDeviceInfo supported | 63 | 2 | 0 | 0 |
-| LPS 36 (standard), getDeviceInfo not supported | 62 | 3 | 0 | 0 |
-| LPS 36HI/EN, getDeviceInfo supported | 65 | 0 | 0 | 0 |
-| LPS 36HI/EN, getDeviceInfo not supported | 64 | 1 | 0 | 0 |
-| Sensor unreachable | 0 | 0 | 1 | 1 |
-
-#### Notes on specific steps
-
-`ethernetTrigger` is tested with OPERATION_MODE temporarily set to Input Triggered (1). The test sets this mode, calls the trigger, then restores the original mode. If the sensor was already in Input Triggered mode the result is the same.
-
-`ethernetActivation(true)` is tested with ACTIVATION temporarily set to Regard (1) and OPERATION_MODE set to Free Running (0) so that activation immediately produces a scan without an additional software trigger.
-
-`ethernetActivation(false, deactivate)` sends the deactivation command but does not wait for a response. The LPS 36 protocol specification states that the sensor sends no response in the deactivated state, so the call is fire-and-forget. The PASS line confirms the UDP packet was transmitted.
-
-The `connected` field in the status object returned by `connect()` reflects the sensor state at the moment the ACK was generated, before the connection flag is updated internally by the sensor firmware. The value `false` immediately after a successful connect is normal and expected.
 
 ### Protocol overview
 
@@ -648,6 +539,129 @@ sensor.on('error', (err) => console.error('sensor error:', err));
 | `EXPOSURE_MANUAL` | `0x0BBE` | Manual exposure time in 1/10 µs. LPS36HI/EN: 739–13109, LPS36: 973–13109. The sensor sets exposure incrementally — actual exposure may deviate slightly from the value written. Read back with `getTaskParam` to get the value the sensor actually applied. |
 | `FOV_X` | `0x0BBF` | X detection range: two signed 16-bit values [minX, maxX] in 1/10 mm |
 | `FOV_Z` | `0x0BC0` | Z detection range: two unsigned 16-bit values [minZ, maxZ] in 1/10 mm |
+
+### Running the test suite
+
+`test.js` exercises every protocol command against a live sensor and reports a PASS, WARN or FAIL per step. The exit code is 0 when no steps have failed.
+
+```
+npm test
+```
+
+Two environment variables control the target:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LPS_HOST` | `192.168.60.3` | Sensor IP address |
+| `LPS_TIMEOUT` | `3000` | Response timeout in milliseconds |
+
+```
+LPS_HOST=10.0.0.5 LPS_TIMEOUT=5000 npm test
+```
+
+#### Output format
+
+Each step is printed as a block with a heading in brackets followed by a result line:
+
+| Prefix | Counted as | Meaning |
+|--------|-----------|---------|
+| `PASS` | passed | Command acknowledged. Returned value printed as JSON. |
+| `WARN` | warned | Command not supported on this sensor model. Not a failure. |
+| `FAIL` | failed | Timeout or NACK. Exit code will be 1. |
+
+Free-running stream events are logged with prefix `[stream]` (only the first two per phase are shown).
+
+#### Test steps
+
+The table below lists every test block, what it verifies, and the expected result by sensor model.
+
+| Test step | Verifies | Standard LPS 36 | LPS 36HI/EN |
+|-----------|----------|-----------------|-------------|
+| open sockets | UDP socket bind | PASS | PASS |
+| connect (Standard-Connect) | `CONNECT` (0x434E) | PASS | PASS |
+| free-running measure mode | 2 s of streaming Z+X data at up to 100 Hz | PASS | PASS |
+| enterCommandMode | `ENTER_CMD` (0x3132) | PASS | PASS |
+| getInspectionTask | `GET_TASK` (0x0049) | PASS | PASS |
+| setInspectionTask (temp) | `SET_TASK` (0x004B), save=false | PASS | PASS |
+| setInspectionTask (persist) | `SET_TASK` (0x004B), save=true | PASS | PASS |
+| getTaskParam TASK_NUMBER | `GET_TASK_PARAM` (0x006F), ID 0x0BB8 | PASS | PASS |
+| getTaskParam TASK_NAME | `GET_TASK_PARAM`, ID 0x0BB9 — prints decoded name | PASS | PASS |
+| getTaskParam OPERATION_MODE | `GET_TASK_PARAM`, ID 0x0BBA | PASS | PASS |
+| getTaskParam ACTIVATION | `GET_TASK_PARAM`, ID 0x0BBB | PASS | PASS |
+| getTaskParam CASCADE_OUTPUT | `GET_TASK_PARAM`, ID 0x0BBC | PASS | PASS |
+| getTaskParam LIGHT_EXPOSURE | `GET_TASK_PARAM`, ID 0x0BBD | PASS | PASS |
+| getTaskParam EXPOSURE_MANUAL | `GET_TASK_PARAM`, ID 0x0BBE | PASS | PASS |
+| getTaskParam FOV_X | `GET_TASK_PARAM`, ID 0x0BBF — prints range in mm | PASS | PASS |
+| getTaskParam FOV_Z | `GET_TASK_PARAM`, ID 0x0BC0 — prints range in mm | PASS | PASS |
+| setTaskParam OPERATION_MODE (FreeRunning, temp) | `SET_TASK_PARAM` (0x006D), saves value 0 temporarily | PASS | PASS |
+| setTaskParam OPERATION_MODE (restore, temp) | Restores original value temporarily | PASS | PASS |
+| setTaskParam ACTIVATION (Disregard, temp) | Writes Disregard (0) temporarily | PASS | PASS |
+| setTaskParam CASCADE_OUTPUT (Disable, temp) | Writes Disable (0) temporarily | PASS | PASS |
+| setTaskParam LIGHT_EXPOSURE (Normal, temp) | Writes Normal (0) temporarily | PASS | PASS |
+| setTaskParam FOV_X (restore, temp) | Restores previously read FOV X temporarily | PASS | PASS |
+| setTaskParam FOV_Z (restore, temp) | Restores previously read FOV Z temporarily | PASS | PASS |
+| getUserParam DISABLE_X_OUTPUT | `GET_USER_PARAM` (0x005B), ID 0x07D4 | PASS | PASS |
+| getUserParam TX_PAUSE | `GET_USER_PARAM`, ID 0x07D8 — prints value in ms | PASS | PASS |
+| getUserParam MEDIAN_FILTER | `GET_USER_PARAM`, ID 0x07DB | PASS | PASS |
+| setXOutput(disable, temp) | `SET_USER_PARAM` via convenience wrapper | PASS | PASS |
+| setXOutput(enable, temp) | Restores X output | PASS | PASS |
+| setMedianFilter(on, temp) | Enables median filter temporarily | PASS | PASS |
+| setMedianFilter(off, temp) | Disables median filter temporarily | PASS | PASS |
+| setTxPause(5, temp) | Sets TX pause to 0.5 ms temporarily | PASS | PASS |
+| setTxPause(0, temp) | Restores TX pause to default | PASS | PASS |
+| setScanNumber(100) | `SET_SCAN_NUM` (0x0053) | PASS | PASS |
+| setEncoderValue(0) | `SET_ENCODER` (0x0029), 32-bit value 0 | PASS | PASS |
+| setEncoderValue(12345) | `SET_ENCODER`, 32-bit value 12345 | PASS | PASS |
+| setEncoderValue(0) | Resets encoder to 0 | PASS | PASS |
+| setLaserGate(off) | `SET_LASER` (0x0001), value 0 | PASS | PASS |
+| setLaserGate(on) | `SET_LASER`, value 1 | PASS | PASS |
+| triggerSingleMeasurement | `TRIGGER_SINGLE` (0x0003) + 30 ms settle | PASS | PASS |
+| getZCoordinates | `GET_Z` (0x0013) — prints valid point count and Z range | PASS | PASS |
+| getXCoordinates | `GET_X` (0x0011) — prints X range | PASS | PASS |
+| getZXCoordinates (HI-Connect only) | `GET_ZX` (0x005F) | WARN | PASS |
+| setTaskParam OPERATION_MODE (Input Triggered, temp) | Sets Input Triggered mode for the ethernetTrigger test | PASS | PASS |
+| exitCommandMode | `EXIT_CMD` (0x3133) | PASS | PASS |
+| ethernetTrigger | `ETH_TRIGGER` (0x4554) — sensor is now in Input Triggered mode, returns one triggered scan | PASS | PASS |
+| enterCommandMode (activation setup) | Re-enters command mode to configure activation | PASS | PASS |
+| setTaskParam ACTIVATION (Regard, temp) | Sets Activation Input = Regard for the ethernetActivation test | PASS | PASS |
+| setTaskParam OPERATION_MODE (FreeRunning, temp) | Sets Free Running so that activation immediately produces a scan | PASS | PASS |
+| exitCommandMode (activation setup) | Returns to measure mode | PASS | PASS |
+| ethernetActivation(true) | `ETH_ACTIVATION` (0x4541), value 1 — sensor activates and returns first free-running scan | PASS | PASS |
+| ethernetActivation(false, deactivate) | `ETH_ACTIVATION`, value 0 — sensor deactivates, no response per spec (fire-and-forget) | PASS | PASS |
+| enterCommandMode (restore) | Re-enters command mode to restore original settings | PASS | PASS |
+| setTaskParam ACTIVATION (restore, temp) | Restores original Activation Input setting | PASS | PASS |
+| setTaskParam OPERATION_MODE (restore, temp) | Restores original Operation Mode | PASS | PASS |
+| getAllTaskParams (undocumented 0x0043) | Undocumented bulk read of all task params. WARN if not supported. | PASS or WARN | PASS or WARN |
+| getDeviceInfo (undocumented 0x0045) | Undocumented `GET_DEVICE_INFO` — prints firmware and serial strings. WARN if not supported. | PASS or WARN | PASS or WARN |
+| exitCommandMode (restore) | Returns to measure mode | PASS | PASS |
+| disconnect | `DISCONNECT` (0x4443) | PASS | PASS |
+| connect (HI-Connect) | `CONNECT` with user data word 0x0001 — standard model falls back to Standard-Connect | PASS | PASS |
+| HI-Connect free-running | 1 s of streaming data — ZX packets on HI model, Z+X pairs on standard | PASS | PASS |
+| enterCommandMode (HI) | Same as standard enterCommandMode | PASS | PASS |
+| triggerSingleMeasurement (HI) | Same as standard triggerSingleMeasurement | PASS | PASS |
+| getZXCoordinates (HI) | `GET_ZX` in HI command mode | WARN | PASS |
+| exitCommandMode (HI) | Same as standard exitCommandMode | PASS | PASS |
+| disconnect (HI) | Same as standard disconnect | PASS | PASS |
+
+#### Expected summary by model
+
+| Sensor model | passed | warned | failed | Exit code |
+|--------------|--------|--------|--------|-----------|
+| LPS 36 (standard), getDeviceInfo supported | 63 | 2 | 0 | 0 |
+| LPS 36 (standard), getDeviceInfo not supported | 62 | 3 | 0 | 0 |
+| LPS 36HI/EN, getDeviceInfo supported | 65 | 0 | 0 | 0 |
+| LPS 36HI/EN, getDeviceInfo not supported | 64 | 1 | 0 | 0 |
+| Sensor unreachable | 0 | 0 | 1 | 1 |
+
+#### Notes on specific steps
+
+`ethernetTrigger` is tested with OPERATION_MODE temporarily set to Input Triggered (1). The test sets this mode, calls the trigger, then restores the original mode. If the sensor was already in Input Triggered mode the result is the same.
+
+`ethernetActivation(true)` is tested with ACTIVATION temporarily set to Regard (1) and OPERATION_MODE set to Free Running (0) so that activation immediately produces a scan without an additional software trigger.
+
+`ethernetActivation(false, deactivate)` sends the deactivation command but does not wait for a response. The LPS 36 protocol specification states that the sensor sends no response in the deactivated state, so the call is fire-and-forget. The PASS line confirms the UDP packet was transmitted.
+
+The `connected` field in the status object returned by `connect()` reflects the sensor state at the moment the ACK was generated, before the connection flag is updated internally by the sensor firmware. The value `false` immediately after a successful connect is normal and expected.
 
 ### Common recipes
 
