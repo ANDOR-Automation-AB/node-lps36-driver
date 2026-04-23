@@ -140,7 +140,7 @@ class LPS36 extends EventEmitter {
     this.cmdPort = cmdPort;
     this.dataPort = dataPort;
     this.timeout = timeout;
-    this._pending = new Map(); // cmd number to { resolve, reject, timer }
+    this._pending = new Map(); // cmd code → queue of { resolve, reject, timer }
     this._cmdSock = null;
     this._dataSock = null;
   }
@@ -158,9 +158,11 @@ class LPS36 extends EventEmitter {
     }
     this._cmdSock = null;
     this._dataSock = null;
-    for (const { reject, timer } of this._pending.values()) {
-      clearTimeout(timer);
-      reject(new Error('closed'));
+    for (const queue of this._pending.values()) {
+      for (const { reject, timer } of queue) {
+        clearTimeout(timer);
+        reject(new Error('closed'));
+      }
     }
     this._pending.clear();
   }
@@ -197,10 +199,17 @@ class LPS36 extends EventEmitter {
 
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this._pending.delete(cmd);
+        const q = this._pending.get(cmd);
+        if (q) {
+          const i = q.findIndex(x => x.timer === timer);
+          if (i !== -1) q.splice(i, 1);
+          if (!q.length) this._pending.delete(cmd);
+        }
         reject(new Error(`0x${cmd.toString(16).padStart(4, '0')} timeout`));
       }, this.timeout);
-      this._pending.set(cmd, { resolve, reject, timer });
+      const q = this._pending.get(cmd) ?? [];
+      q.push({ resolve, reject, timer });
+      this._pending.set(cmd, q);
     });
 
     await this._send(buf);
@@ -220,11 +229,14 @@ class LPS36 extends EventEmitter {
       return;
     }
 
-    // Response txNum field = echoed command number (per protocol spec section 10.2.3)
-    const p = this._pending.get(hdr.txNum);
-    if (p) {
+    // Response txNum = echoed cmd code of the incoming packet (protocol spec 10.2.3).
+    // Each cmd code maps to a FIFO queue so concurrent calls of the same command
+    // are resolved in the order the sensor processes them.
+    const q = this._pending.get(hdr.txNum);
+    if (q?.length) {
+      const p = q.shift();
+      if (!q.length) this._pending.delete(hdr.txNum);
       clearTimeout(p.timer);
-      this._pending.delete(hdr.txNum);
       p.resolve({ hdr, userdata });
     }
   }
