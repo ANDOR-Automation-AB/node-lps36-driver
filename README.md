@@ -8,6 +8,8 @@ A Node.js library for communicating with the Leuze LPS 36 (line profile sensor) 
 | Network | Leuze LPS 36 sensor reachable over UDP |
 | Firewall | UDP ports 9008 (commands) and 5634 (measure data) open, and ICMP echo (ping) allowed |
 
+For running the test suite against a live sensor, see [Running the test suite](#running-the-test-suite).
+
 ### Installation
 
 ```
