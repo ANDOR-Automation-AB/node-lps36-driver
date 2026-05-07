@@ -2,6 +2,17 @@
 
 See [README](README.md) for full documentation.
 
+## 1.0.2 — 2026-04-29
+
+### Changed
+
+- **`getAllTaskParams` now accepts a `group` argument** (default `0x0002`, backwards-compatible).
+  Wireshark analysis of LPSsoft "Export settings to sensor" revealed that command `0x0043`
+  supports three group selectors:
+  - `0x0001` — user parameters (same IDs as `PARAM.*`)
+  - `0x0002` — inspection task parameters by internal sensor ID (1–21) — previous and default behaviour
+  - `0x0004` — inspection task parameters by documented ID (`0x0BBx`, same IDs as `TASK_PARAM.*`)
+
 ## 1.0.1 — 2026-04-23
 
 ### Fixed

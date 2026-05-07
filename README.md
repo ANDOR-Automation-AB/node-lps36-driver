@@ -362,9 +362,17 @@ The payload layout is inferred from a single Wireshark capture of LPSsoft "Check
 | 12 + fwLen | Firmware UTF-16LE chars (one char per word, ASCII range) |
 | Immediately after | Article/serial chars until first non-ASCII word |
 
-##### `sensor.getAllTaskParams()` — `Promise<entry[]>`
+##### `sensor.getAllTaskParams(group?)` — `Promise<entry[]>`
 
-Sends undocumented command `0x0043` (arg `0x0002`) and reads response `0x0044`. Returns all inspection task parameters in one round-trip instead of one `getTaskParam` call per ID.
+Sends undocumented command `0x0043` and reads response `0x0044`. Returns all parameters in the selected group in one round-trip.
+
+`group` selects which parameter set the sensor returns:
+
+| `group` | Parameters returned |
+|---------|---------------------|
+| `0x0001` | User parameters — same IDs as `PARAM.*`, equivalent to calling `getUserParam` for each |
+| `0x0002` | Inspection task parameters by **internal** sensor ID (1–21) — default |
+| `0x0004` | Inspection task parameters by **documented** ID (`0x0BBx` range, same IDs as `TASK_PARAM.*`) |
 
 Each entry in the returned array:
 
@@ -391,9 +399,9 @@ word 6 : current value  (scalar)        OR  value[1] / range max  (valCount ≥ 
 word 7 : persist flag (always 1)
 ```
 
-#### Observed parameter mapping
+#### Observed parameter mapping (`group = 0x0002`)
 
-Parameters returned by `getAllTaskParams` use an internal numbering that differs from the user-facing `TASK_PARAM.*` IDs used by `getTaskParam`/`setTaskParam`. The following mapping was established from live capture on an LPS 36 (firmware V01.525011132401):
+Parameters returned by `getAllTaskParams(0x0002)` use an internal numbering that differs from the user-facing `TASK_PARAM.*` IDs used by `getTaskParam`/`setTaskParam`. The following mapping was established from live capture on an LPS 36 (firmware V01.525011132401):
 
 | Internal paramId | dataType | Identified as | Notes |
 |------------------|----------|---------------|-------|
@@ -416,7 +424,7 @@ Parameters returned by `getAllTaskParams` use an internal numbering that differs
 
 **Type-3 parameters** (paramIds 3 and 4): `word5` in the raw entry is non-zero (`65534` and `15` respectively), which breaks the normal 8-word layout where word 5 is always `0`. These parameters may use a 32-bit value format where `[word4, word5]` and `[word6, word7]` each encode one 32-bit value. The current decoder treats them the same as other `valCount ≥ 2` params and returns `[word4, word6]` — the result may be incorrect for these entries.
 
-**Internal IDs vs. TASK_PARAM IDs**: `getAllTaskParams` returns parameters using the sensor's internal ID scheme (1–21 in observed data). These bear no relation to the `0x0BB8`–`0x0BC0` IDs used by `getTaskParam`/`setTaskParam`. There is currently no known complete mapping between the two.
+**Internal IDs vs. TASK_PARAM IDs** (`group = 0x0002`): parameters are returned using the sensor's internal ID scheme (1–21 in observed data). These bear no relation to the `0x0BB8`–`0x0BC0` IDs used by `getTaskParam`/`setTaskParam`. There is currently no known complete mapping between the two. Use `group = 0x0004` to retrieve parameters keyed by `TASK_PARAM.*`-compatible IDs instead.
 
 Throws if the sensor does not respond within `timeout` ms.
 

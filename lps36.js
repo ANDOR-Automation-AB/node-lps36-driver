@@ -27,7 +27,7 @@ const CMD = {
   ETH_TRIGGER:    0x4554,
   ETH_ACTIVATION: 0x4541,
   // ⚠ Undocumented — observed in LPSsoft Wireshark capture, not in public spec:
-  GET_ALL_TASK_PARAMS: 0x0043,  // bulk read all task params; arg = 0x0002
+  GET_ALL_TASK_PARAMS: 0x0043,  // bulk read all task params; group: 0x0001=user params, 0x0002=internal IDs, 0x0004=task param IDs
   GET_DEVICE_INFO:     0x0045,  // firmware version + serial; arg = 0x0011
 };
 
@@ -569,12 +569,16 @@ class LPS36 extends EventEmitter {
    *          OR value[1] (range params with valCount ≥ 2, e.g. FOV max — apply sign if dataType=5)
    *   Word 7 : persist flag (1 = value is saved to flash, observed always 1)
    *
+   * @param {number} [group=0x0002] Group selector:
+   *   0x0001 — user parameters (paramIds in 0x07Dx range, matching PARAM.*)
+   *   0x0002 — inspection task parameters by internal ID (paramIds 1–21, default)
+   *   0x0004 — inspection task parameters by documented ID (paramIds in 0x0BBx range, matching TASK_PARAM.*)
    * @returns {Array<{ paramId, dataType, valCount, limitLo, values, persist, raw }>}
    *   limitLo is only meaningful for scalar params (valCount === 1).
    *   values contains 1 element for scalar params, 2 elements for range params.
    */
-  async getAllTaskParams() {
-    const { hdr, userdata } = await this._sendCmd(CMD.GET_ALL_TASK_PARAMS, [0x0002]);
+  async getAllTaskParams(group = 0x0002) {
+    const { hdr, userdata } = await this._sendCmd(CMD.GET_ALL_TASK_PARAMS, [group]);
     if (hdr.cmd !== RSP.ALL_TASK_PARAMS) throw new Error('Get all task params NACK');
     const words = readUInt16Array(userdata, hdr.udataLen);
     const ENTRY  = 8;
