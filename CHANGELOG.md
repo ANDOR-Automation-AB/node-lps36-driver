@@ -2,6 +2,17 @@
 
 See [README](README.md) for full documentation.
 
+## 1.0.3 — 2026-05-07
+
+### Fixed
+
+- **Unhandled rejection crash on `close()` with unawaited commands.** If a caller issued a
+  command without awaiting the returned promise and `close()` was then called (e.g. during a
+  stop→reconnect sequence), the pending promise was rejected with `Error: closed` but had no
+  rejection handler, crashing the Node.js process with an unhandledRejection event.
+  A noop `.catch(() => {})` is now attached to every command promise before it is returned.
+  Callers that do `await` the promise still receive the rejection normally.
+
 ## 1.0.2 — 2026-04-29
 
 ### Changed

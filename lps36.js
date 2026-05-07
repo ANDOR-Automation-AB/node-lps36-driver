@@ -211,6 +211,10 @@ class LPS36 extends EventEmitter {
       q.push({ resolve, reject, timer });
       this._pending.set(cmd, q);
     });
+    // Attach a noop catch so that if the caller does not await this promise (fire-and-forget),
+    // a rejection from close() or a timeout will not trigger an unhandledRejection crash.
+    // Callers that DO await still receive the rejection normally.
+    promise.catch(() => {});
 
     await this._send(buf);
     return promise;
